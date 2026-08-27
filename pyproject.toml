@@ -1,0 +1,14 @@
+[project]
+name = "retrieval-ops"
+version = "0.1.0"
+description = "Evidence-grounded RAG reliability components with hybrid retrieval, provenance, and safe answer control."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["scikit-learn>=1.8,<2"]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
