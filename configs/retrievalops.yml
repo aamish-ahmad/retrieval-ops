@@ -1,0 +1,13 @@
+retrieval:
+  sparse_top_k: 20
+  dense_top_k: 20
+  fused_top_k: 20
+  reranked_top_k: 8
+  rrf_constant: 60
+  dense_dimensions: 128
+reliability:
+  minimum_evidence_score: 0.05
+  eligible_lifecycle_states:
+    - active
+    - current
+  max_retry_attempts: 1
