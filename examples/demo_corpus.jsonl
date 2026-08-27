@@ -1,0 +1,3 @@
+{"chunk_id":"travel-approval","document_id":"travel-policy","section":"Emergency approval","text":"Emergency travel requires director approval before booking.","version":"2026-01","effective_state":"active"}
+{"chunk_id":"travel-expense","document_id":"travel-policy","section":"Expenses","text":"Receipts are required for reimbursable travel expenses.","version":"2026-01","effective_state":"active"}
+{"chunk_id":"archive-approval","document_id":"old-policy","section":"Emergency approval","text":"Emergency travel requires manager approval.","version":"2024-01","effective_state":"retired"}
