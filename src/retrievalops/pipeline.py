@@ -1,25 +1,32 @@
+"""End-to-end evidence-grounded RAG pipeline."""
+
 from __future__ import annotations
 
-from .bm25 import BM25Index
-from .dense import LSAIndex
-from .evidence import select_evidence
-from .fusion import reciprocal_rank_fusion
-from .generation import generate_extractive
-from .models import Chunk, Response
-from .rerank import rerank
+from .generation import build_response
+from .reliability import decide_state
+from .retrieval import HybridRetriever
+from .schema import Chunk, Response
 
 
-class RetrievalPipeline:
-    """Small end-to-end hybrid retrieval pipeline with explicit evidence control."""
+class EvidenceGroundedRAG:
+    """Compose retrieval, evidence control, and grounded response construction."""
 
-    def __init__(self, chunks: list[Chunk]) -> None:
-        self.bm25 = BM25Index(chunks)
-        self.dense = LSAIndex(chunks)
+    def __init__(self, chunks: list[Chunk], *, minimum_evidence_score: float = 0.05) -> None:
+        self.retriever = HybridRetriever(chunks)
+        self.minimum_evidence_score = minimum_evidence_score
 
-    def answer(self, query: str, *, target_version: str | None = None) -> Response:
-        sparse = self.bm25.search(query, top_k=20)
-        dense = self.dense.search(query, top_k=20)
-        fused = reciprocal_rank_fusion(sparse, dense, top_k=20)
-        ranked = rerank(query, fused, top_k=8)
-        state, selected, reason = select_evidence(ranked, target_version=target_version)
-        return generate_extractive(state, selected, reason)
+    def answer(
+        self,
+        question: str,
+        *,
+        requested_version: str | None = None,
+        retry_attempt: int = 0,
+    ) -> Response:
+        evidence = self.retriever.retrieve(question)
+        state, selected, reason = decide_state(
+            evidence,
+            requested_version=requested_version,
+            retry_attempt=retry_attempt,
+            minimum_evidence_score=self.minimum_evidence_score,
+        )
+        return build_response(state, selected, reason)
