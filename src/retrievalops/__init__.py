@@ -1,6 +1,6 @@
-"""RetrievalOps: inspectable RAG reliability primitives."""
+"""RetrievalOps public API."""
 
-from .models import Chunk, Evidence, Response, ResponseState
-from .pipeline import RetrievalPipeline
+from .pipeline import EvidenceGroundedRAG
+from .schema import Chunk, Evidence, Response, ResponseState
 
-__all__ = ["Chunk", "Evidence", "Response", "ResponseState", "RetrievalPipeline"]
+__all__ = ["Chunk", "Evidence", "Response", "ResponseState", "EvidenceGroundedRAG"]
