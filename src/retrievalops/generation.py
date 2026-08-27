@@ -1,18 +1,34 @@
+"""Grounded extractive response construction."""
+
 from __future__ import annotations
 
-from .models import Evidence, Response, ResponseState
+from .schema import Evidence, Response, ResponseState
 
 
-def generate_extractive(state: ResponseState, evidence: list[Evidence], reason: str) -> Response:
-    """Return an inspectable extractive answer, or no answer for non-answer states."""
+def build_response(
+    state: ResponseState,
+    evidence: tuple[Evidence, ...],
+    reason: str,
+) -> Response:
+    """Construct an answer only when the reliability layer permits it."""
     if state is not ResponseState.ANSWER:
-        return Response(state=state, answer="", evidence=tuple(evidence), reason=reason)
+        return Response(state=state, answer=None, evidence=evidence, reason=reason)
     if not evidence:
-        raise ValueError("ANSWER state requires evidence")
+        raise ValueError("ANSWER requires selected evidence")
     support = evidence[0]
+    claim = support.chunk.text
+    trace = (
+        {
+            "chunk_id": support.chunk.chunk_id,
+            "document_id": support.chunk.document_id,
+            "section": support.chunk.section,
+            "claim": claim,
+        },
+    )
     return Response(
         state=ResponseState.ANSWER,
-        answer=support.chunk.text,
+        answer=claim,
         evidence=(support,),
+        claim_trace=trace,
         reason=reason,
     )
