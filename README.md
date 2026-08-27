@@ -1,137 +1,84 @@
 # RetrievalOps
 
-**Evidence-grounded RAG with hybrid retrieval, provenance, and safe answer control.**
+RetrievalOps is an evidence-grounded RAG reliability system for teams that need answers they can inspect, trace, and safely withhold when the corpus does not support a conclusion.
 
-RetrievalOps is a modular RAG reliability system for knowledge-heavy workflows where an answer is only useful if the supporting evidence can be inspected, traced, and rejected when it is not good enough.
+## The problem
 
-## Why this exists
+Knowledge systems often return fluent text without making its source, freshness, or scope clear. That creates operational risk: a user cannot tell whether an answer is supported by an approved document, a superseded policy, or no source at all.
 
-Typical RAG demos optimize for producing an answer. RetrievalOps treats retrieval quality, evidence admissibility, provenance, and safe failure behavior as first-class parts of the system.
-
-Instead of returning a plausible response at any cost, the pipeline can:
-
-- retrieve with independent sparse and dense signals;
-- fuse and rerank candidate evidence;
-- preserve document, section, chunk, and source provenance;
-- reject inapplicable or stale evidence when version metadata is available;
-- retry once when evidence is insufficient;
-- clarify when evidence is ambiguous; and
-- abstain rather than emit unsupported answer fields.
+RetrievalOps turns a local document corpus into a controlled answer path. It retrieves evidence, ranks it with multiple signals, checks whether it is usable, and produces either a source-grounded answer or an explicit safe state.
 
 ## Architecture
 
 ```text
-documents + metadata
-        ↓
-normalized chunks + provenance
-        ↓
-BM25 sparse retrieval ───────────┐
-                                 ├── reciprocal-rank fusion
-LSA dense retrieval ─────────────┘
-        ↓
-candidate-local reranking
-        ↓
-evidence selection + admissibility
-        ↓
-grounded generation
-        ↓
-answer + provenance + response state
-        ↓
-ANSWER | CLARIFY | RETRY | ABSTAIN
+JSONL corpus
+    -> BM25 sparse retrieval + LSA dense retrieval
+    -> reciprocal-rank fusion
+    -> candidate-local character n-gram reranking
+    -> evidence selection and lifecycle/version checks
+    -> grounded extractive response + claim trace
+    -> ANSWER | CLARIFY | RETRY | ABSTAIN
 ```
 
-## Core components
+The system keeps retrieval, evidence acceptance, and answer construction separate. Each answer carries ranked evidence and a claim trace with the chunk, document, and section that support the displayed claim.
 
-| Layer | Implementation | Purpose |
-| --- | --- | --- |
-| Sparse retrieval | Okapi BM25 | exact-term and lexical matching |
-| Dense retrieval | TF-IDF + TruncatedSVD (LSA) | complementary semantic signal without an embedding API |
-| Fusion | reciprocal-rank fusion | combine independent ranked lists |
-| Reranking | character n-gram TF-IDF cosine | reorder the fused candidate set |
-| Evidence control | admissibility + bounded retry/clarify/abstain states | prevent unsupported downstream answers |
-| Generation | evidence-grounded extractive answer construction | keep answers tied to selected evidence |
-| Traceability | document/section/chunk/source references | make support inspectable end to end |
+## Reliability behavior
 
-## Reliability contract
+- Hybrid retrieval combines BM25 lexical matching with deterministic LSA semantic matching.
+- Reciprocal-rank fusion reduces dependence on a single retrieval signal.
+- A local reranker narrows fused candidates to the most question-relevant evidence.
+- Evidence is filtered by lifecycle state and optional version before an answer is permitted.
+- Weak or absent evidence returns `RETRY`, then `ABSTAIN` on a bounded repeat attempt.
+- Equally ranked evidence from different documents returns `CLARIFY` instead of asserting a choice.
+- `ANSWER` is extractive: the response text is copied from selected evidence, with provenance attached.
 
-RetrievalOps separates **retrieval relevance** from **evidence admissibility**.
+## Stack
 
-A retrieved passage is not automatically allowed to support an answer. The evidence layer evaluates candidate state before generation.
+- Python 3.11+
+- scikit-learn for TF-IDF, truncated SVD, and vector operations
+- pytest for deterministic behavior checks
+- JSONL for portable, inspectable local corpora
 
-Implemented response states:
+## Run locally
 
-- `ANSWER` — selected evidence is admissible;
-- `CLARIFY` — the current evidence is ambiguous;
-- `RETRY` — one bounded retry is permitted;
-- `ABSTAIN` — support remains insufficient or inadmissible.
-
-## Repository map
-
-```text
-src/retrievalops/
-  bm25.py          sparse retrieval
-  dense.py         LSA dense retrieval
-  fusion.py        reciprocal-rank fusion
-  rerank.py        candidate reranking
-  evidence.py      admissibility + safe response states
-  generation.py    grounded answer construction
-  pipeline.py      end-to-end orchestration
-
-tests/             deterministic unit and integration tests
-```
-
-## Quick start
+Create an environment, install the package with its test tools, then run the test suite:
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate       # Windows CMD: .venv\Scripts\activate
-python -m pip install -e ".[test]"
-pytest
+. .venv/bin/activate
+pip install -e '.[dev]'
+pytest -q
 ```
 
-Minimal usage:
+Windows CMD activation:
 
-```python
-from retrievalops import Chunk, RetrievalPipeline
-
-chunks = [
-    Chunk("1", "handbook", "travel", "Travel expenses require manager approval before booking."),
-    Chunk("2", "handbook", "leave", "Employees receive twenty days of annual leave."),
-]
-
-pipeline = RetrievalPipeline(chunks)
-response = pipeline.answer("What is required before booking travel expenses?")
-
-print(response.state)
-print(response.answer)
-print(response.evidence[0].chunk.document)
+```cmd
+.venv\Scripts\activate
+pip install -e ".[dev]"
+pytest -q
 ```
 
-## What this project demonstrates
+Inspect the included synthetic corpus:
 
-- end-to-end RAG pipeline design rather than a single vector-search demo;
-- hybrid sparse+dense retrieval and rank fusion;
-- explicit contracts between retrieval, reranking, evidence, and generation stages;
-- deterministic ranking and reproducible behavior;
-- provenance-preserving evidence handling;
-- evidence-to-answer traceability;
-- safe failure states for weak or ambiguous support;
-- focused tests around retrieval and admissibility behavior.
+```bash
+retrievalops --corpus examples/demo_corpus.jsonl --question "Who may approve emergency travel?"
+```
 
-## Current scope
+The CLI prints the response state, answer text when allowed, selected source IDs, and the claim trace. It is deliberately local and uses only the supplied corpus.
 
-This version intentionally favors transparent, inspectable components over model-heavy infrastructure.
+## Repository guide
 
-Current limitations:
+- `src/retrievalops/` — ingest, retrieval, reliability checks, grounded response construction, and CLI
+- `tests/` — retrieval and safe-behavior tests
+- `configs/` — documented retrieval and evidence thresholds
+- `docs/ARCHITECTURE.md` — component boundaries and data flow
+- `docs/REPRODUCIBILITY.md` — corpus contract and deterministic run notes
+- `examples/` — a synthetic corpus safe to share publicly
 
-- dense retrieval uses LSA rather than a neural embedding model;
-- reranking is lexical rather than a learned cross-encoder;
-- generation is extractive rather than abstractive;
-- abstention is rule-based rather than probabilistically calibrated;
-- production serving, background ingestion, persistence, deployment, and observability are outside this version.
+## Engineering capabilities demonstrated
 
-Those are extension points, not capabilities claimed as already implemented.
+This project demonstrates modular RAG system design, deterministic ranking pipelines, provenance-aware data models, explicit failure states, version and lifecycle filtering, reproducible local execution, and behavior-focused testing.
 
-## Design principle
+## Current limitations and extensions
 
-> **A retrieved passage is not evidence until the system can justify using it.**
+The current dense stage is LSA rather than an embedding model, reranking is lexical, and the answer constructor is extractive rather than generative. The repository does not include a service layer, persistent index, access controls, automated evaluation harness, or a user interface. Natural future extensions include benchmarked embedding and cross-encoder stages, richer claim segmentation, document-level permissions, observability, and a separately evaluated service interface.
